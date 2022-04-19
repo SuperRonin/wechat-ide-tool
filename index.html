@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信IDE辅助工具</title>
+    <!-- 导入样式 -->
+    <link rel="stylesheet" href="//unpkg.com/element-plus/dist/index.css" />
+    <script src="https://unpkg.com/vue@3"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/axios/0.26.1/axios.js"></script>
+    <!-- 导入组件库 -->
+    <script src="//unpkg.com/element-plus"></script>
+</head>
+
+<body>
+    <div id="app">
+        <el-card>
+            <template #header>
+                <p>当前登录态：
+                    <el-result :icon="loginInfo.login ? 'success': 'error'" :title="loginInfo.login ? '在线': '离线'">
+                    </el-result>
+                </p>
+            </template>
+
+            <el-button type="primary" @click="dialogVisible = true">添加项目</el-button>
+
+            <el-table :data="projectList" style="width: 100%">
+                <el-table-column prop="remark" label="备注"></el-table-column>
+                <el-table-column prop="path" label="路径"></el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button type="primary" @click="handlePreview(scope.row)">预览</el-button>
+                        <el-button type="danger" @click="handleDeleteProject(scope.row, scope.$index)">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </el-card>
+
+
+        <el-dialog v-model="dialogVisible" title="预览" width="30%" :before-close="handleClose">
+            <el-form :model="formData">
+                <el-form-item label="路径">
+                    <el-input v-model="formData.path"></el-input>
+                </el-form-item>
+                <el-form-item label="备注">
+                    <el-input v-model="formData.remark"></el-input>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="handleCreatePreview()">确定</el-button>
+                </span>
+            </template>
+        </el-dialog>
+
+        <el-dialog v-model="qrcodeDialogVisible" title="预览" width="30%" :close-on-click-modal="false"
+            :before-close="handleQrcodeClose">
+            <div style="height: 300px;text-align: center;">
+                <p v-if="!qrcode" style="font-size: 18px;font-weight: 800;">正在打包中......</p>
+                <img v-else :src="qrcode" style="width: 260px; height: 260px;" alt="">
+            </div>
+
+        </el-dialog>
+    </div>
+    <script>
+        const HOST = 'http://127.0.0.1:43060'
+        const CHECK_LOGIN_API = `${HOST}/v2/islogin`
+        const PREVIEW_QRCODE_API = `${HOST}/v2/preview`
+        let isRequest = false
+        const CancelToken = axios.CancelToken;
+        let cancel;
+        window.onload = function () {
+            Vue.createApp({
+                data() {
+                    return {
+                        loginInfo: {},
+                        dialogVisible: false,
+                        qrcodeDialogVisible: false,
+                        qrcode: '',
+                        projectList: [],
+                        formData: {
+                            path: 'D:/work/private-shop-mp',
+                            remark: '云店'
+                        }
+                    }
+                },
+                created() {
+                    this.initProjectList();
+                    this.handleCheckLogin()
+                },
+                watch: {
+                    projectList: function(newValue) {
+                        localStorage.projectList = JSON.stringify(newValue)
+                    }
+                },
+                methods: {
+                    initProjectList() {
+                        if(localStorage.projectList){
+                            try{
+                                this.projectList = JSON.parse(localStorage.projectList)
+                            }catch(e){
+                                this.$message.error('读取项目失败')
+                                this.projectList = []
+                            }
+                        }
+                        
+                    },
+                    handleCheckLogin() {
+                        axios({
+                            method: 'Get',
+                            url: CHECK_LOGIN_API
+                        }).then(res => {
+                            this.loginInfo = res.data
+                        })
+                    },
+                    handleFileChange(e) {
+                        console.log('e', e);
+                    },
+                    handleDeleteProject(scope, index) {
+                        console.log('index', index);
+                        
+                        this.projectList = Object.assign([], this.projectList.slice(index + 1, 1))
+                        console.log('index', this.projectList.slice(index + 1, 1));
+                    },
+                    handlePreview(row) {
+                        this.qrcodeDialogVisible = true
+                        axios.get( `${PREVIEW_QRCODE_API}?project=${encodeURIComponent(row.path)}&qr-format=base64`, {
+                            cancelToken: new CancelToken(function executor(c) {
+                                // executor 函数接收一个 cancel 函数作为参数
+                                cancel = c;
+                            })
+                        }).then(res => {
+                            if (res) this.qrcode = 'data:image/png;base64,' + res.data;
+                        })
+                    },
+                    handleQrcodeClose() {
+                        this.qrcodeDialogVisible = false
+                        cancel();
+                    },
+                    handleCreatePreview() {
+                        this.dialogVisible = false
+                        this.projectList.push({ ...this.formData })
+                        localStorage.projectList = JSON.stringify(this.projectList)
+                    }
+                }
+            })
+                .use(ElementPlus)
+                .mount('#app')
+        }
+    </script>
+</body>
+
+</html>
